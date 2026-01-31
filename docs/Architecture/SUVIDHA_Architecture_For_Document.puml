@@ -1,0 +1,82 @@
+@startuml SUVIDHA_Architecture_For_Proposal
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 10
+skinparam roundcorner 6
+skinparam shadowing false
+skinparam padding 8
+
+' Document-ready: fits on one page, clear 4 layers
+skinparam rectangle {
+  BackgroundColor<<Presentation>> #E3F2FD
+  BorderColor<<Presentation>> #1565C0
+  RoundCorner 6
+}
+skinparam rectangle {
+  BackgroundColor<<Gateway>> #C8E6C9
+  BorderColor<<Gateway>> #2E7D32
+  RoundCorner 6
+}
+skinparam rectangle {
+  BackgroundColor<<Service>> #FFE0B2
+  BorderColor<<Service>> #E65100
+  RoundCorner 6
+}
+skinparam database {
+  BackgroundColor #E1BEE7
+  BorderColor #6A1B9A
+}
+
+title SUVIDHA — System Architecture (4 Layers)\nSmart Urban Virtual Interactive Digital Helpdesk Assistant
+
+rectangle "**1. PRESENTATION**" <<Presentation>> {
+  [Kiosk UI\nReact • Touch • i18n] as K
+  [Admin UI\nReact • Analytics] as A
+}
+
+rectangle "**2. API GATEWAY**" <<Gateway>> {
+  [API Gateway\nJWT • Route • Rate Limit] as G
+}
+
+rectangle "**3. BACKEND MICROSERVICES**" <<Service>> {
+  [Auth] as Auth
+  [Electricity] as E
+  [Gas] as Gas
+  [Water] as W
+  [Municipal] as M
+  [Complaint] as C
+  [Payment] as P
+  [Notification] as N
+  [Document] as D
+  [Analytics] as X
+}
+
+database "**4. DATA**\nPostgreSQL\nUsers • Bills • Transactions\nComplaints • Audit" as DB
+
+K -down-> G
+A -down-> G
+G -down-> Auth
+G -down-> E
+G -down-> Gas
+G -down-> Water
+G -down-> M
+G -down-> C
+G -down-> P
+G -down-> N
+G -down-> D
+G -down-> X
+Auth -down-> DB
+E -down-> DB
+Gas -down-> DB
+W -down-> DB
+M -down-> DB
+C -down-> DB
+P -down-> DB
+N -down-> DB
+D -down-> DB
+X -down-> DB
+
+note right of G : TLS • JWT • RBAC\nNo direct UI→DB
+
+@enduml
