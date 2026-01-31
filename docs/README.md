@@ -13,9 +13,13 @@ This folder contains the project documentation for SUVIDHA: a unified, multiling
 | [**UNDERSTANDING.md**](./UNDERSTANDING.md) | **My understanding** — synthesis of the project, design choices, and what “done” looks like |
 | [**PROJECT_OVERVIEW.md**](./PROJECT_OVERVIEW.md) | Core idea, problem statement, user journey, and one-line pitch |
 | [**FEATURES.md**](./FEATURES.md) | Complete feature list — citizen kiosk, admin dashboard, security, system |
+| [**TECH_STACK.md**](./TECH_STACK.md) | **Complete technical stack** — frontend, gateway, backend, DB, security, DevOps, tooling |
+| [**FEATURES_AND_INNOVATION.md**](./FEATURES_AND_INNOVATION.md) | **Complete features + innovation list** — all features and all innovations in one file |
 | [**ARCHITECTURE.md**](./ARCHITECTURE.md) | System architecture — layers, microservices, data flow, security |
 | [**INNOVATION.md**](./INNOVATION.md) | Innovation & differentiation — inclusive design, scalability, Smart City alignment |
 | [**TECHNICAL_PROPOSAL.md**](./TECHNICAL_PROPOSAL.md) | Formal technical proposal — stack, compliance, deliverables, impact |
+| [**IMPLEMENTATION_PLAN.md**](./IMPLEMENTATION_PLAN.md) | **How to build it** — phased plan (0–6), order of implementation, risks, success criteria |
+| [**MASTER_PLAN.md**](./MASTER_PLAN.md) | **Full master plan** — 20 phases, sub-phases, tasks, exit criteria, progress table; use for tracking |
 
 ---
 
