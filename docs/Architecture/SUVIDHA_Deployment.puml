@@ -1,0 +1,64 @@
+@startuml SUVIDHA_Deployment
+!theme plain
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontName Segoe UI
+skinparam defaultFontSize 11
+skinparam node {
+  BackgroundColor #ECEFF1
+  BorderColor #546E7A
+  RoundCorner 8
+}
+skinparam cloud {
+  BackgroundColor #E8F5E9
+  BorderColor #2E7D32
+}
+skinparam database {
+  BackgroundColor #EDE7F6
+  BorderColor #5E35B1
+}
+
+title **SUVIDHA — Deployment Architecture**\n<size:10>Docker Compose • Single / Multi-node • Government Cloud / On-Premise</size>
+
+cloud "**Clients**" as clients {
+  node "**Kiosk\n(Browser / Touch)**" as kiosk #E3F2FD
+  node "**Admin\n(Browser)**" as admin #E3F2FD
+}
+
+node "**Reverse Proxy / Load Balancer**\nNGINX • TLS termination" as lb #E8F5E9
+
+node "**API Gateway**\nNode.js / FastAPI\nPort 8080" as gw #E8F5E9
+
+node "**Backend Services**" as backend {
+  node "Auth" as auth #FFF8E1
+  node "Electricity" as elec #FFF8E1
+  node "Gas" as gas #FFF8E1
+  node "Water" as water #FFF8E1
+  node "Municipal" as mun #FFF8E1
+  node "Complaint" as compl #FFF8E1
+  node "Payment" as pay #FFF8E1
+  node "Notification" as notif #FFF8E1
+  node "Document" as doc #FFF8E1
+  node "Analytics" as analytics #FFF8E1
+}
+
+database "**PostgreSQL**\nPort 5432\nUsers • Bills • Transactions\nComplaints • Audit" as db #EDE7F6
+
+clients -down-> lb : HTTPS
+lb -down-> gw : HTTP (internal)
+gw -down-> backend : REST (internal)
+backend -down-> db : TCP 5432
+
+note right of lb
+  **Production**
+  • TLS (HTTPS)
+  • Rate limit at edge
+end note
+
+note bottom of backend
+  **Scaling**
+  • Each service can scale independently
+  • Docker / K8s / VM
+  • Single-city or multi-city
+end note
+
+@enduml
