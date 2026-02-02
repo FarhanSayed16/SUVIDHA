@@ -1133,6 +1133,85 @@ This document is the **single source of truth** for building SUVIDHA from zero t
 
 ---
 
+# Phase 20: DPI & Indigenous Tech Integration
+
+**Goal:** Integrate or document alignment with India’s Digital Public Infrastructure (DPI) for production and proposal enhancement (Atmanirbhar Bharat, MeitY, Smart City 2.0).
+
+**Estimated duration:** Post–MVP; can run in parallel or after Phase 19  
+**Dependencies:** Core SUVIDHA (auth, bill, complaint, admin) stable (Phase 7–12 complete)
+
+---
+
+## Phase 20 — Sub-Phase 20.1: BBPS (Bharat Bill Payment System)
+
+- [ ] Research BBPS Agent onboarding and API (bill fetch, payment).
+- [ ] Integrate or wrap bill fetch/pay via BBPS APIs (replace or augment mock billing for Electricity, Gas, Water, Municipal).
+- [ ] Document: SUVIDHA as BBPS Agent; single API for utility bills; Consumer ID / Mobile across BBPS-onboarded billers.
+
+**Deliverable:** BBPS integration (demo/API) or documented deferral with reason.
+
+---
+
+## Phase 20 — Sub-Phase 20.2: Bhashini (TTS / ASR)
+
+- [ ] Integrate Bhashini TTS API in kiosk for menu/bill in selected regional language.
+- [ ] Integrate Bhashini ASR for voice complaint flow (native dialect → translated for Admin).
+- [ ] Document: language and voice-complaint flows; fallback to react-i18next if API unavailable.
+
+**Deliverable:** Bhashini TTS/ASR in kiosk (demo/API) or documented deferral.
+
+---
+
+## Phase 20 — Sub-Phase 20.3: DigiLocker
+
+- [ ] Implement consent flow for citizen; fetch verified ID/Address from DigiLocker for new connection or KYC.
+- [ ] Push receipts and No Dues Certificates to citizen DigiLocker (API integration).
+- [ ] Document: KYC and issuance flows; security and consent.
+
+**Deliverable:** DigiLocker fetch/push (demo/API) or documented deferral.
+
+---
+
+## Phase 20 — Sub-Phase 20.4: MeriPehchaan / Parichay (SSO)
+
+- [ ] Integrate MeriPehchaan (or Parichay) for Admin login via government SSO.
+- [ ] Optional: citizen login via Jan Parichay; document scope and fallback (OTP).
+- [ ] Document: SSO flow; role mapping.
+
+**Deliverable:** Admin SSO via MeriPehchaan (demo/API) or documented deferral.
+
+---
+
+## Phase 20 — Sub-Phase 20.5: MeghRaj (GI Cloud)
+
+- [ ] Document deployment runbook and config for Government of India cloud (MeghRaj).
+- [ ] No code change required if stack is already containerized (Docker); adjust env and networking.
+- [ ] Document: data sovereignty and localization; compliance.
+
+**Deliverable:** MeghRaj deployment doc and (optional) demo environment.
+
+---
+
+## Phase 20 — Sub-Phase 20.6: Mappls (MapmyIndia)
+
+- [ ] Geo-tag complaints (lat/long) in Complaint service; capture from kiosk or admin.
+- [ ] Optional: utility outage map on kiosk using Mappls.
+- [ ] Document: geo-tagging and map usage; replace any generic map references.
+
+**Deliverable:** Mappls geo-tag (and optional map) (demo/API) or documented deferral.
+
+---
+
+## Phase 20 — Exit Criteria
+
+- [ ] Each chosen DPI component is either integrated (demo/API) or clearly deferred with reason in docs.
+- [ ] TECH_STACK.md, FEATURES_AND_INNOVATION.md, and proposal (PROFORMA) reflect DPI alignment and indigenized tech table.
+- [ ] docs/Enhancement/ENHANCEMENT_DPI_SUMMARY.md (and optional ENHANCEMENT_DPI_INTEGRATION.md) updated.
+
+---
+
+---
+
 # Phase Status Table (Progress Tracking)
 
 Use this table to track completion. Mark with [x] or replace Pending with Done/In Progress and date.
@@ -1159,6 +1238,7 @@ Use this table to track completion. Mark with [x] or replace Pending with Done/I
 | 17 | Demo Data, Testing & Polish | Pending | |
 | 18 | Deployment & DevOps | Pending | |
 | 19 | Documentation & Handover | Pending | |
+| 20 | DPI & Indigenous Tech Integration | Pending | |
 
 ---
 
@@ -1186,6 +1266,7 @@ Use this table to track completion. Mark with [x] or replace Pending with Done/I
 | 17 | 17.1 Seed data script, 17.2 Demo mode label, 17.3 Testing & bug fixes |
 | 18 | 18.1 Docker Compose full stack, 18.2 Frontend build & serve, 18.3 DEPLOYMENT.md |
 | 19 | 19.1 User manual citizen, 19.2 User manual admin, 19.3 Technical docs, 19.4 README final |
+| 20 | 20.1 BBPS, 20.2 Bhashini, 20.3 DigiLocker, 20.4 MeriPehchaan, 20.5 MeghRaj, 20.6 Mappls |
 
 ---
 
