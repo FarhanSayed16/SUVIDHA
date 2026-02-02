@@ -1,0 +1,97 @@
+@startuml SUVIDHA_Class_Model
+!theme plain
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontName Segoe UI
+skinparam defaultFontSize 11
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #FFF8E1
+  BorderColor #FF8F00
+  RoundCorner 6
+}
+skinparam arrow {
+  Color #424242
+  Thickness 1
+}
+
+title **SUVIDHA — Domain Model (Simplified)**\n<size:10>Core entities for Kiosk, Admin & Services</size>
+
+package "**Identity**" #E8F5E9 {
+  class User {
+    + id : UUID
+    + mobile : string
+    + consumer_id : string?
+    + role : enum (citizen, admin)
+    + created_at : timestamp
+    + updated_at : timestamp
+  }
+  class Session {
+    + id : UUID
+    + user_id : FK
+    + expires_at : timestamp
+    + created_at : timestamp
+  }
+  User "1" -- "0..*" Session : has
+}
+
+package "**Billing & Payments**" #E3F2FD {
+  class Bill {
+    + id : UUID
+    + consumer_id : string
+    + service_type : enum (electricity, gas, water, municipal)
+    + amount : decimal
+    + due_date : date
+    + period : string
+    + status : string
+    + created_at : timestamp
+  }
+  class Transaction {
+    + id : UUID
+    + user_id : FK
+    + service_type : enum
+    + amount : decimal
+    + status : string
+    + reference_id : string
+    + created_at : timestamp
+  }
+  Bill "1" -- "0..*" Transaction : paid by
+  User "1" -- "0..*" Transaction : initiates
+}
+
+package "**Complaints**" #F3E5F5 {
+  class Complaint {
+    + id : UUID
+    + user_id : FK
+    + category : string
+    + description : text
+    + priority : enum (emergency, high, normal)
+    + status : enum (registered, in_progress, resolved)
+    + reference_number : string
+    + created_at : timestamp
+    + updated_at : timestamp
+  }
+  User "1" -- "0..*" Complaint : raises
+}
+
+package "**Content & Audit**" #ECEFF1 {
+  class Advisory {
+    + id : UUID
+    + title : string
+    + body : text
+    + type : enum (announcement, outage, emergency)
+    + active_from : timestamp
+    + active_until : timestamp
+    + created_at : timestamp
+  }
+  class AuditLog {
+    + id : UUID
+    + user_id : FK?
+    + action : string
+    + entity_type : string
+    + entity_id : UUID
+    + payload : jsonb
+    + created_at : timestamp
+  }
+}
+
+@enduml
