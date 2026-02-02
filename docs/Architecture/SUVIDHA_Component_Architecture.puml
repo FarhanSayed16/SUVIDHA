@@ -1,0 +1,129 @@
+@startuml SUVIDHA_System_Architecture
+!theme plain
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontName Segoe UI
+skinparam defaultFontSize 11
+skinparam roundcorner 8
+skinparam shadowing false
+skinparam padding 10
+skinparam componentStyle rectangle
+
+' ========== COLOR PALETTE ==========
+' Presentation: Blue
+' Gateway: Green
+' Microservices: Orange/Amber
+' Data: Purple
+
+skinparam rectangle {
+  BackgroundColor<<Presentation>> #E3F2FD
+  BorderColor<<Presentation>> #1976D2
+  FontColor<<Presentation>> #0D47A1
+  RoundCorner 8
+}
+
+skinparam rectangle {
+  BackgroundColor<<Gateway>> #E8F5E9
+  BorderColor<<Gateway>> #2E7D32
+  FontColor<<Gateway>> #1B5E20
+  RoundCorner 8
+}
+
+skinparam rectangle {
+  BackgroundColor<<Service>> #FFF8E1
+  BorderColor<<Service>> #FF8F00
+  FontColor<<Service>> #E65100
+  RoundCorner 8
+}
+
+skinparam rectangle {
+  BackgroundColor<<Data>> #F3E5F5
+  BorderColor<<Data>> #7B1FA2
+  FontColor<<Data>> #4A148C
+  RoundCorner 8
+}
+
+skinparam database {
+  BackgroundColor #EDE7F6
+  BorderColor #5E35B1
+  FontColor #311B92
+}
+
+skinparam arrow {
+  Color #424242
+  Thickness 2
+}
+
+skinparam note {
+  BackgroundColor #FFFDE7
+  BorderColor #F9A825
+  FontColor #F57F17
+}
+
+title **SUVIDHA — System Architecture**\n<size:10>Smart Urban Virtual Interactive Digital Helpdesk Assistant | Microservices • 4 Layers</size>
+
+rectangle "**PRESENTATION LAYER**" <<Presentation>> as PRES {
+  component [**Kiosk UI**\nReact.js • Touch-optimized\nLanguage • Accessibility\nBill • Pay • Complaints • Receipt] as Kiosk
+  component [**Admin Dashboard**\nReact.js • Web\nAnalytics • Complaints\nContent • Reports] as Admin
+}
+
+rectangle "**API GATEWAY LAYER**" <<Gateway>> as GW {
+  component [**API Gateway**\nNode.js / FastAPI\nJWT • Rate Limit • Route\nSingle Entry Point] as Gateway
+}
+
+rectangle "**BACKEND MICROSERVICES**" <<Service>> as SVC {
+  component [**Auth Service**\nOTP • JWT • Session] as Auth
+  component [**Electricity**\nBill • Pay • History] as Elec
+  component [**Gas Service**\nBill • Pay • History] as Gas
+  component [**Water Service**\nBill • Pay • History] as Water
+  component [**Municipal**\nBills • Grievances] as Mun
+  component [**Complaint Service**\nRegister • Status • Priority] as Compl
+  component [**Payment Service**\nTransaction • Gateway] as Pay
+  component [**Notification**\nAlerts • Advisories] as Notif
+  component [**Document**\nPDF • QR • Receipt] as Doc
+  component [**Analytics**\nUsage • Reports] as Analytics
+}
+
+database "**DATA LAYER**\nPostgreSQL / MySQL\nUsers • Sessions • Bills\nTransactions • Complaints\nAudit • Analytics" as DB <<Data>>
+
+' Connections: Presentation -> Gateway
+Kiosk -down-> Gateway : HTTPS\nJWT
+Admin -down-> Gateway : HTTPS\nJWT (Admin)
+
+' Gateway -> Services
+Gateway -down-> Auth : /api/auth/*
+Gateway -down-> Elec : /api/electricity/*
+Gateway -down-> Gas : /api/gas/*
+Gateway -down-> Water : /api/water/*
+Gateway -down-> Mun : /api/municipal/*
+Gateway -down-> Compl : /api/complaints/*
+Gateway -down-> Pay : /api/payments/*
+Gateway -down-> Notif : /api/notifications/*
+Gateway -down-> Doc : /api/documents/*
+Gateway -down-> Analytics : /api/analytics/*
+
+' Services -> DB (no direct UI->DB)
+Auth -down-> DB
+Elec -down-> DB
+Gas -down-> DB
+Water -down-> DB
+Mun -down-> DB
+Compl -down-> DB
+Pay -down-> DB
+Notif -down-> DB
+Doc -down-> DB
+Analytics -down-> DB
+
+note right of Gateway
+  **Security**
+  • TLS (HTTPS)
+  • JWT validation
+  • RBAC (Citizen/Admin)
+  • Rate limiting
+end note
+
+note bottom of DB
+  **Strict service access only**
+  No direct UI → Database
+end note
+
+@enduml
