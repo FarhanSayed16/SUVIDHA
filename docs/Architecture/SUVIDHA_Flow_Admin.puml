@@ -1,0 +1,46 @@
+@startuml SUVIDHA_Admin_Flow
+!theme plain
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontName Segoe UI
+skinparam defaultFontSize 11
+skinparam roundcorner 6
+skinparam activity {
+  BackgroundColor #E8F5E9
+  BorderColor #2E7D32
+}
+skinparam activityDiamond {
+  BackgroundColor #FFF8E1
+  BorderColor #FF8F00
+}
+skinparam arrow {
+  Color #424242
+  Thickness 2
+}
+
+title **SUVIDHA — Admin Flow**\n<size:10>Dashboard → Complaints → Advisories → Reports | JWT role=admin</size>
+
+start
+:Admin logs in (separate role);
+note right: JWT with role=admin
+:Dashboard loads;
+:Analytics Service queries DB for counts;
+:Display dashboard (complaints, bills paid, etc.);
+
+split
+  :List / filter complaints;
+  :Complaint Service fetches from DB;
+  :Admin updates complaint status;
+  :Complaint Service saves to DB;
+split again
+  :Publish advisories;
+  :Notification / Content Service stores in DB;
+  :Kiosks fetch active advisories;
+split again
+  :Export reports;
+  :Analytics Service generates CSV/PDF;
+  :Download report;
+end split
+
+stop
+
+@enduml
