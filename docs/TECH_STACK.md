@@ -162,4 +162,21 @@ This document lists the full technology stack for building and running SUVIDHA: 
 
 ---
 
+## 10. Indigenized / DPI (Enhancement for Production)
+
+SUVIDHA is designed to align with India’s **Digital Public Infrastructure (DPI)** and Smart City 2.0. The baseline stack above is used for development and demo; the following indigenized components are recommended for production and proposal alignment (Atmanirbhar Bharat, MeitY guidelines).
+
+| Component | Baseline (Current) | Indigenized (DPI Proposal) |
+|-----------|--------------------|----------------------------|
+| **Utility Billing** | Custom APIs / mock billers | **BBPS** (Bharat Bill Payment System) — SUVIDHA as BBPS Agent; single API for Electricity, Gas, Water, Municipal; bill fetch by Consumer ID / Mobile across BBPS-onboarded billers |
+| **Translation & Voice** | react-i18next / browser TTS | **Bhashini API** — TTS for menu/bill in regional languages; ASR for voice complaint in native dialect → translated for Admin |
+| **Documents** | File upload / PDF download | **DigiLocker** — KYC: fetch verified ID/Address from citizen's DigiLocker; push receipts and No Dues Certificates to DigiLocker |
+| **Maps & Geo** | (None or generic) | **Mappls** (MapmyIndia) — Geo-tag complaints (lat/long); optional utility outage maps on kiosk |
+| **Authentication** | JWT + OTP (Twilio/mock) | **MeriPehchaan / Parichay** (National SSO) — Admin login via government SSO; optional citizen login via Jan Parichay |
+| **Hosting** | Generic cloud (AWS/Azure) or on-premise | **MeghRaj** (GI Cloud) — Run full stack on Government of India cloud; data sovereignty and localization |
+
+**Implementation:** See **MASTER_PLAN.md** Phase 20 (DPI & Indigenous tech integration) and **docs/Enhancement/ENHANCEMENT_DPI_SUMMARY.md**. Baseline stack remains for MVP; DPI components can be integrated post–core (BBPS and Bhashini first for highest citizen impact).
+
+---
+
 This stack aligns with **ARCHITECTURE.md**, **TECHNICAL_PROPOSAL.md**, and **IMPLEMENTATION_PLAN.md**. Lock one option per row (e.g. Node vs Python for gateway/backend) in Phase 0 and document it in `docs/SETUP.md`.
