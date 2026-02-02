@@ -1,0 +1,40 @@
+@startuml SUVIDHA_Citizen_Flow
+!theme plain
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontName Segoe UI
+skinparam defaultFontSize 11
+skinparam roundcorner 6
+skinparam activity {
+  BackgroundColor #E3F2FD
+  BorderColor #1565C0
+}
+skinparam activityDiamond {
+  BackgroundColor #FFF8E1
+  BorderColor #FF8F00
+}
+skinparam arrow {
+  Color #424242
+  Thickness 2
+}
+
+title **SUVIDHA — Citizen Flow**\n<size:10>Login → Service Selection → Bill → Payment → Receipt</size>
+
+start
+:Select language on kiosk;
+:Enter mobile number;
+:Receive OTP (Auth Service);
+:Verify OTP;
+note right: Auth Service issues JWT
+:Select service (Electricity / Gas / Water / Municipal);
+:Enter Consumer ID;
+:Gateway routes to Utility Service;
+:Service fetches bill from DB;
+:Display bill to user;
+:User confirms payment;
+:Gateway routes to Payment Service;
+:Payment records transaction;
+:Document Service generates receipt;
+:Display confirmation & allow print;
+stop
+
+@enduml
