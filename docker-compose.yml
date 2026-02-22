@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: suvidha_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: suvidha_user
+      POSTGRES_PASSWORD: suvidha_pass
+      POSTGRES_DB: suvidha_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U suvidha_user -d suvidha_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  gateway:
+    build:
+      context: ./gateway
+    container_name: suvidha_gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://suvidha_user:suvidha_pass@postgres:5432/suvidha_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
