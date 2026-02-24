@@ -1,0 +1,7 @@
+suvidha_gateway  | 
+suvidha_gateway  | > gateway@1.0.0 start
+suvidha_gateway  | > node dist/index.js
+suvidha_gateway  | 
+suvidha_gateway  | [dotenv@17.3.1] injecting env (0) from ../.env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+suvidha_gateway  | [SUVIDHA Gateway]: Server running on port 8080
+suvidha_gateway  | [SUVIDHA Gateway]: Proxies /api/auth -> http://localhost:3001
