@@ -13,7 +13,8 @@ echo Waiting 10 seconds for PostgreSQL Initialization...
 timeout /t 10 /nobreak >nul
 
 echo.
-echo [2/3] Injecting Mock Test Data (Bills & Citizens)...
+echo [2/3] Initializing Database Schema and Injecting Mock Data...
+docker exec -i suvidha_gateway npx prisma db push --accept-data-loss
 cmd /c "docker exec -i suvidha_db psql -U suvidha_user -d suvidha_db < d:\SUVIDHA\gateway\prisma\seed.sql"
 echo Database Hydrated.
 
@@ -28,4 +29,3 @@ echo.
 echo Open a new terminal, navigate to \kiosk-ui and run [ npm run dev ]
 echo Open another terminal, navigate to \admin-ui and run [ npm run dev ]
 echo ===================================================
-pause
