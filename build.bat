@@ -24,4 +24,3 @@ echo ===================================================
 echo COMPLETE: Static assets generated in /dist folders.
 echo You may now route NGINX to these edge directories.
 echo ===================================================
-pause
