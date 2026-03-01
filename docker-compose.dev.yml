@@ -1,0 +1,94 @@
+version: '3.9'
+
+# docker-compose.dev.yml — Development overrides (hot reload)
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  suvidha-gateway:
+    build:
+      target: builder          # Use builder stage so source is available
+    volumes:
+      - ./gateway/src:/app/src:ro
+    command: ["npx", "ts-node-dev", "--respawn", "--transpile-only", "src/index.ts"]
+    environment:
+      NODE_ENV: development
+
+  suvidha-auth:
+    volumes:
+      - ./services/auth/src:/app/src:ro
+    command: ["npx", "ts-node-dev", "--respawn", "--transpile-only", "src/index.ts"]
+    environment:
+      NODE_ENV: development
+
+  suvidha-electricity:
+    volumes:
+      - ./services/electricity/src:/app/src:ro
+    command: ["npx", "ts-node-dev", "--respawn", "--transpile-only", "src/index.ts"]
+    environment:
+      NODE_ENV: development
+
+  suvidha-gas:
+    volumes:
+      - ./services/gas/src:/app/src:ro
+    command: ["npx", "ts-node-dev", "--respawn", "--transpile-only", "src/index.ts"]
+    environment:
+      NODE_ENV: development
+
+  suvidha-water:
+    volumes:
+      - ./services/water/src:/app/src:ro
+    command: ["npx", "ts-node-dev", "--respawn", "--transpile-only", "src/index.ts"]
+    environment:
+      NODE_ENV: development
+
+  suvidha-municipal:
+    volumes:
+      - ./services/municipal/src:/app/src:ro
+    command: ["npx", "ts-node-dev", "--respawn", "--transpile-only", "src/index.ts"]
+    environment:
+      NODE_ENV: development
+
+  suvidha-complaint:
+    volumes:
+      - ./services/complaint/src:/app/src:ro
+    command: ["npx", "ts-node-dev", "--respawn", "--transpile-only", "src/index.ts"]
+    environment:
+      NODE_ENV: development
+
+  suvidha-payment:
+    volumes:
+      - ./services/payment/src:/app/src:ro
+    command: ["npx", "ts-node-dev", "--respawn", "--transpile-only", "src/index.ts"]
+    environment:
+      NODE_ENV: development
+
+  suvidha-notification:
+    volumes:
+      - ./services/notification/src:/app/src:ro
+    command: ["npx", "ts-node-dev", "--respawn", "--transpile-only", "src/index.ts"]
+    environment:
+      NODE_ENV: development
+
+  suvidha-document:
+    volumes:
+      - ./services/document:/app:rw
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3009", "--reload"]
+
+  suvidha-analytics:
+    volumes:
+      - ./services/analytics:/app:rw
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3010", "--reload"]
+
+  suvidha-request:
+    volumes:
+      - ./services/request/src:/app/src:ro
+    command: ["npx", "ts-node-dev", "--respawn", "--transpile-only", "src/index.ts"]
+    environment:
+      NODE_ENV: development
+
+  suvidha-config:
+    volumes:
+      - ./services/config/src:/app/src:ro
+    command: ["npx", "ts-node-dev", "--respawn", "--transpile-only", "src/index.ts"]
+    environment:
+      NODE_ENV: development

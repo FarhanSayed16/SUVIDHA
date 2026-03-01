@@ -1,38 +1,531 @@
-version: '3.8'
+# ============================================================
+# SUVIDHA — Full Stack Docker Compose (Development)
+# All service names follow CONVENTIONS.md §5
+# ============================================================
+
+x-node-service-defaults: &node-defaults
+  restart: unless-stopped
+  networks:
+    - suvidha-internal
+  env_file:
+    - .env
+  depends_on:
+    suvidha-postgres:
+      condition: service_healthy
+    suvidha-redis:
+      condition: service_healthy
 
 services:
-  postgres:
+  # ── Infrastructure ──────────────────────────────────────────────────────
+  suvidha-postgres:
     image: postgres:15-alpine
-    container_name: suvidha_db
+    container_name: suvidha-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: suvidha_user
-      POSTGRES_PASSWORD: suvidha_pass
-      POSTGRES_DB: suvidha_db
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${POSTGRES_DB:-suvidha_db}
+      POSTGRES_USER: ${POSTGRES_USER:-suvidha}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_dev}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./database/migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5433:5432"
+    networks:
+      - suvidha-internal
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U suvidha_user -d suvidha_db" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-suvidha} -d ${POSTGRES_DB:-suvidha_db}" ]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
-  gateway:
+  suvidha-redis:
+    image: redis:7-alpine
+    container_name: suvidha-redis
+    restart: unless-stopped
+    command: >
+      sh -c "if [ -n \"$$REDIS_PASSWORD\" ]; then
+        exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru;
+      else
+        exec redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru;
+      fi"
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - suvidha-internal
+    healthcheck:
+      test: [ "CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG; else redis-cli ping | grep -q PONG; fi" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── API Gateway ──────────────────────────────────────────────────────────
+  suvidha-gateway:
     build:
       context: ./gateway
-    container_name: suvidha_gateway
+      dockerfile: Dockerfile
+    container_name: suvidha-gateway
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "3000:3000"
+    networks:
+      - suvidha-internal
+    env_file:
+      - .env
     environment:
-      - PORT=8080
-      - NODE_ENV=production
-      - DATABASE_URL=postgresql://suvidha_user:suvidha_pass@postgres:5432/suvidha_db
+      NODE_ENV: development
+      GATEWAY_PORT: "3000"
+      AUTH_SERVICE_URL: http://suvidha-auth:3001
+      ELECTRICITY_SERVICE_URL: http://suvidha-electricity:3002
+      GAS_SERVICE_URL: http://suvidha-gas:3003
+      WATER_SERVICE_URL: http://suvidha-water:3004
+      MUNICIPAL_SERVICE_URL: http://suvidha-municipal:3005
+      COMPLAINT_SERVICE_URL: http://suvidha-complaint:3006
+      PAYMENT_SERVICE_URL: http://suvidha-payment:3007
+      NOTIFICATION_SERVICE_URL: http://suvidha-notification:3008
+      DOCUMENT_SERVICE_URL: http://suvidha-document:3009
+      ANALYTICS_SERVICE_URL: http://suvidha-analytics:3010
+      REQUEST_SERVICE_URL: http://suvidha-request:3011
+      CONFIG_SERVICE_URL: http://suvidha-config:3012
+      CORS_ORIGINS: "http://localhost:80,http://localhost:8080,http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174"
     depends_on:
-      postgres:
+      suvidha-postgres:
         condition: service_healthy
+      suvidha-redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
+  # ── Microservices ────────────────────────────────────────────────────────
+  suvidha-auth:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    container_name: suvidha-auth
+    <<: *node-defaults
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      DEMO_MODE: ${DEMO_MODE:-true}
+      PORT: "3001"
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-suvidha-auth-service}
+      JWT_CITIZEN_EXPIRY_SECONDS: ${JWT_CITIZEN_EXPIRY_SECONDS:-1800}
+      JWT_ADMIN_EXPIRY_SECONDS: ${JWT_ADMIN_EXPIRY_SECONDS:-28800}
+      OTP_MOCK: ${OTP_MOCK:-true}
+      OTP_TTL_SECONDS: ${OTP_TTL_SECONDS:-300}
+      OTP_PEPPER: ${OTP_PEPPER}
+      MERIPEHCHAAN_CLIENT_ID: ${MERIPEHCHAAN_CLIENT_ID}
+      MERIPEHCHAAN_CLIENT_SECRET: ${MERIPEHCHAAN_CLIENT_SECRET}
+      MERIPEHCHAAN_BASE_URL: ${MERIPEHCHAAN_BASE_URL:-https://meripehchaan.gov.in}
+      ADMIN_CALLBACK_URL: ${ADMIN_CALLBACK_URL}
+      BHASHINI_API_KEY: ${BHASHINI_API_KEY}
+      BHASHINI_PIPELINE_URL: ${BHASHINI_PIPELINE_URL}
+      BHASHINI_USER_ID: ${BHASHINI_USER_ID}
+      BHASHINI_MOCK: ${BHASHINI_MOCK:-true}
+      SMS_PROVIDER: ${SMS_PROVIDER:-MOCK}
+      MSG91_AUTH_KEY: ${MSG91_AUTH_KEY:-}
+      MSG91_TEMPLATE_ID: ${MSG91_TEMPLATE_ID:-}
+      MSG91_SENDER_ID: ${MSG91_SENDER_ID:-SUVIDHA}
+      MSG91_OTP_VAR: ${MSG91_OTP_VAR:-OTP}
+      MSG91_USE_LEGACY_ONLY: ${MSG91_USE_LEGACY_ONLY:-false}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      VIDEO_DEMO_MODE: ${VIDEO_DEMO_MODE:-false}
+      DEMO_CITIZEN_USER_ID: ${DEMO_CITIZEN_USER_ID:-e0000000-0000-0000-0000-000000000001}
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  suvidha-bbps-mock:
+    build:
+      context: .
+      dockerfile: services/bbps-mock/Dockerfile
+    container_name: suvidha-bbps-mock
+    restart: unless-stopped
+    networks:
+      - suvidha-internal
+    ports:
+      - "3014:3014"
+    environment:
+      PORT: "3014"
+      LOG_LEVEL: info
+      BBPS_MOCK_ERROR_RATE: "5"
+    healthcheck:
+      test: [ "CMD-SHELL", "node -e \"const h=require('http');h.get('http://localhost:3014/health',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))\"" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  suvidha-electricity:
+    build:
+      context: .
+      dockerfile: services/electricity/Dockerfile
+    container_name: suvidha-electricity
+    <<: *node-defaults
+    ports:
+      - "3002:3002"
+    environment:
+      NODE_ENV: development
+      PORT: "3002"
+      SERVICE_TYPE: ELECTRICITY
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://suvidha-redis:6379}
+      BBPS_BASE_URL: ${BBPS_BASE_URL}
+      BBPS_AGENT_ID: ${BBPS_AGENT_ID}
+      BBPS_AGENT_SECRET: ${BBPS_AGENT_SECRET}
+      BBPS_MOCK: ${BBPS_MOCK:-true}
+      BBPS_MOCK_URL: http://suvidha-bbps-mock:3014
+      CONFIG_SERVICE_URL: http://suvidha-config:3012
+    depends_on:
+      suvidha-postgres:
+        condition: service_healthy
+      suvidha-redis:
+        condition: service_healthy
+      suvidha-bbps-mock:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:3002/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  suvidha-gas:
+    build:
+      context: .
+      dockerfile: services/gas/Dockerfile
+    container_name: suvidha-gas
+    <<: *node-defaults
+    ports:
+      - "3003:3003"
+    environment:
+      NODE_ENV: development
+      PORT: "3003"
+      SERVICE_TYPE: GAS
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://suvidha-redis:6379}
+      BBPS_MOCK: ${BBPS_MOCK:-true}
+      BBPS_MOCK_URL: http://suvidha-bbps-mock:3014
+      CONFIG_SERVICE_URL: http://suvidha-config:3012
+    depends_on:
+      suvidha-postgres:
+        condition: service_healthy
+      suvidha-redis:
+        condition: service_healthy
+      suvidha-bbps-mock:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:3003/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  suvidha-water:
+    build:
+      context: .
+      dockerfile: services/water/Dockerfile
+    container_name: suvidha-water
+    <<: *node-defaults
+    ports:
+      - "3004:3004"
+    environment:
+      NODE_ENV: development
+      PORT: "3004"
+      SERVICE_TYPE: WATER
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://suvidha-redis:6379}
+      BBPS_MOCK: ${BBPS_MOCK:-true}
+      BBPS_MOCK_URL: http://suvidha-bbps-mock:3014
+      CONFIG_SERVICE_URL: http://suvidha-config:3012
+    depends_on:
+      suvidha-postgres:
+        condition: service_healthy
+      suvidha-redis:
+        condition: service_healthy
+      suvidha-bbps-mock:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:3004/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  suvidha-municipal:
+    build:
+      context: .
+      dockerfile: services/municipal/Dockerfile
+    container_name: suvidha-municipal
+    <<: *node-defaults
+    ports:
+      - "3005:3005"
+    environment:
+      NODE_ENV: development
+      PORT: "3005"
+      SERVICE_TYPE: MUNICIPAL
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://suvidha-redis:6379}
+      BBPS_MOCK: ${BBPS_MOCK:-true}
+      BBPS_MOCK_URL: http://suvidha-bbps-mock:3014
+      CONFIG_SERVICE_URL: http://suvidha-config:3012
+    depends_on:
+      suvidha-postgres:
+        condition: service_healthy
+      suvidha-redis:
+        condition: service_healthy
+      suvidha-bbps-mock:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:3005/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  suvidha-complaint:
+    build:
+      context: .
+      dockerfile: services/complaint/Dockerfile
+    container_name: suvidha-complaint
+    <<: *node-defaults
+    ports:
+      - "3006:3006"
+    environment:
+      NODE_ENV: development
+      PORT: "3006"
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://suvidha-redis:6379}
+      MAPPLS_API_KEY: ${MAPPLS_API_KEY}
+      MAPPLS_BASE_URL: ${MAPPLS_BASE_URL:-https://atlas.mappls.com/api}
+      MAPPLS_MOCK: ${MAPPLS_MOCK:-true}
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:3006/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  suvidha-payment:
+    build:
+      context: .
+      dockerfile: services/payment/Dockerfile
+    container_name: suvidha-payment
+    <<: *node-defaults
+    ports:
+      - "3007:3007"
+    environment:
+      NODE_ENV: development
+      PORT: "3007"
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://suvidha-redis:6379}
+      MERCHANT_VPA: ${MERCHANT_VPA:-suvidha@billdesk}
+      PAYMENT_GATEWAY_URL: ${PAYMENT_GATEWAY_URL}
+      PAYMENT_GATEWAY_KEY: ${PAYMENT_GATEWAY_KEY}
+      PAYMENT_MOCK: ${PAYMENT_MOCK:-true}
+      DEMO_MODE: "true"
+      DOCUMENT_SERVICE_URL: http://suvidha-document:3009
+      NOTIFICATION_SERVICE_URL: http://suvidha-notification:3008
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:3007/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  suvidha-notification:
+    build:
+      context: .
+      dockerfile: services/notification/Dockerfile
+    container_name: suvidha-notification
+    <<: *node-defaults
+    ports:
+      - "3008:3008"
+    environment:
+      NODE_ENV: development
+      PORT: "3008"
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://suvidha-redis:6379}
+      SMS_PROVIDER: ${SMS_PROVIDER:-MOCK}
+      MSG91_AUTH_KEY: ${MSG91_AUTH_KEY:-}
+      MSG91_TEMPLATE_ID: ${MSG91_TEMPLATE_ID:-}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:3008/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  suvidha-document:
+    build:
+      context: .
+      dockerfile: services/document/Dockerfile
+    container_name: suvidha-document
+    restart: unless-stopped
+    networks:
+      - suvidha-internal
+    ports:
+      - "3009:3009"
+    environment:
+      PORT: "3009"
+      DATABASE_URL: ${DATABASE_URL}
+      RECEIPT_SECRET_KEY: ${JWT_SECRET:-suvidha-receipt-secret}
+      ULB_NAME: "Pune Municipal Corporation"
+      ULB_HELPLINE: "1800-120-8888"
+      DOCUMENT_SERVICE_URL: http://suvidha-document:3009
+      DIGILOCKER_MOCK: ${DIGILOCKER_MOCK:-true}
+    depends_on:
+      suvidha-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:3009/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+
+  suvidha-analytics:
+    build:
+      context: ./services/analytics
+      dockerfile: Dockerfile
+    container_name: suvidha-analytics
+    restart: unless-stopped
+    networks:
+      - suvidha-internal
+    ports:
+      - "3010:3010"
+    environment:
+      DATABASE_URL_PYTHON: ${DATABASE_URL_PYTHON:-${DATABASE_URL}}
+      REDIS_URL: ${REDIS_URL:-redis://suvidha-redis:6379}
+      OBJECT_STORAGE_URL: ${OBJECT_STORAGE_URL}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-suvidha-receipts}
+      OBJECT_STORAGE_KEY: ${OBJECT_STORAGE_KEY}
+      OBJECT_STORAGE_SECRET: ${OBJECT_STORAGE_SECRET}
+    depends_on:
+      suvidha-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:3010/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+
+  suvidha-request:
+    build:
+      context: ./services/request
+      dockerfile: Dockerfile
+    container_name: suvidha-request
+    <<: *node-defaults
+    ports:
+      - "3011:3011"
+    environment:
+      NODE_ENV: development
+      PORT: "3011"
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://suvidha-redis:6379}
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:3011/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  suvidha-config:
+    build:
+      context: ./services/config
+      dockerfile: Dockerfile
+    container_name: suvidha-config
+    <<: *node-defaults
+    ports:
+      - "3012:3012"
+    environment:
+      NODE_ENV: development
+      PORT: "3012"
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://suvidha-redis:6379}
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:3012/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ── Frontend ─────────────────────────────────────────────────────────────
+  suvidha-kiosk-ui:
+    build:
+      context: ./kiosk-ui
+      dockerfile: Dockerfile
+      args:
+        VITE_VIDEO_DEMO: ${VITE_VIDEO_DEMO:-false}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000}
+        VITE_KIOSK_ID: ${VITE_KIOSK_ID:-c0000000-0000-0000-0000-000000000001}
+        VITE_ULB_ID: ${VITE_ULB_ID:-a0000000-0000-0000-0000-000000000001}
+    container_name: suvidha-kiosk-ui
+    restart: unless-stopped
+    networks:
+      - suvidha-internal
+    ports:
+      - "80:80"
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000}
+      VITE_KIOSK_ID: ${VITE_KIOSK_ID:-KIOSK-DEV-001}
+      VITE_ULB_ID: ${VITE_ULB_ID:-}
+      VITE_DEMO_MODE: ${VITE_DEMO_MODE:-true}
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:80/ || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  suvidha-admin-ui:
+    build:
+      context: ./admin-ui
+      dockerfile: Dockerfile
+    container_name: suvidha-admin-ui
+    restart: unless-stopped
+    networks:
+      - suvidha-internal
+    ports:
+      - "8080:80"
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000}
+      VITE_DEMO_MODE: ${VITE_DEMO_MODE:-true}
+      VITE_MAPPLS_API_KEY: ${VITE_MAPPLS_API_KEY:-}
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:80/ || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+# ── Volumes ───────────────────────────────────────────────────────────────
 volumes:
   postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# ── Networks ──────────────────────────────────────────────────────────────
+networks:
+  suvidha-internal:
+    driver: bridge
+    # Microservices are NOT exposed to the outside world — only gateway port 3000,
+    # kiosk-ui port 80, and admin-ui port 8080 are published.
