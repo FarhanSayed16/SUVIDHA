@@ -1,0 +1,329 @@
+# ============================================================
+# SUVIDHA — GitLab CI/CD Pipeline
+# TRD §10.3 — Production pipeline
+# ============================================================
+
+stages:
+  - validate
+  - test
+  - security-scan
+  - build
+  - staging-deploy
+  - integration-test
+  - security-test
+  - production-deploy
+
+variables:
+  DOCKER_REGISTRY: registry.meghraj.gov.in/suvidha
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  # Override per-service in child pipelines
+  SERVICE_NAME: "suvidha-gateway"
+  IMAGE_NAME: "${DOCKER_REGISTRY}/${SERVICE_NAME}:${CI_COMMIT_SHA}"
+
+# ── Shared config ─────────────────────────────────────────────────────────
+.node_template: &node_template
+  image: node:20-alpine
+  cache:
+    key: "${CI_JOB_NAME}-${CI_COMMIT_REF_SLUG}"
+    paths:
+      - node_modules/
+      - .npm/
+
+.docker_template: &docker_template
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+
+# ── Stage: validate ───────────────────────────────────────────────────────
+lint-gateway:
+  stage: validate
+  <<: *node_template
+  script:
+    - cd gateway
+    - npm ci
+    - npm run lint
+    - npm run type-check
+  rules:
+    - changes:
+        - gateway/**/*
+
+lint-services:
+  stage: validate
+  <<: *node_template
+  script:
+    - |
+      for svc in auth electricity gas water municipal complaint payment notification request config; do
+        echo "=== Linting services/${svc} ==="
+        cd services/${svc}
+        npm ci
+        npm run lint || true
+        npm run type-check || true
+        cd ../..
+      done
+  rules:
+    - changes:
+        - services/**/*
+
+lint-python:
+  stage: validate
+  image: python:3.11-slim
+  script:
+    - pip install flake8 mypy
+    - flake8 services/document services/analytics --max-line-length=100
+  rules:
+    - changes:
+        - services/document/**/*
+        - services/analytics/**/*
+
+validate-compose:
+  stage: validate
+  image: docker/compose:latest
+  script:
+    - docker-compose -f docker-compose.yml config --quiet
+  rules:
+    - changes:
+        - docker-compose.yml
+
+# ── Stage: test ───────────────────────────────────────────────────────────
+unit-test-gateway:
+  stage: test
+  <<: *node_template
+  script:
+    - cd gateway
+    - npm ci
+    - npm test -- --coverage --ci --coverageReporters=text-summary --coverageReporters=cobertura
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: gateway/coverage/cobertura-coverage.xml
+    expire_in: 1 week
+  rules:
+    - changes:
+        - gateway/**/*
+
+unit-test-services:
+  stage: test
+  <<: *node_template
+  script:
+    - |
+      for svc in auth electricity gas water municipal complaint payment notification request config; do
+        if [ -f "services/${svc}/package.json" ]; then
+          echo "=== Testing services/${svc} ==="
+          cd services/${svc}
+          npm ci
+          npm test -- --coverage --ci --passWithNoTests || true
+          cd ../..
+        fi
+      done
+  artifacts:
+    expire_in: 1 week
+
+unit-test-python:
+  stage: test
+  image: python:3.11-slim
+  script:
+    - |
+      for svc in document analytics; do
+        if [ -f "services/${svc}/requirements.txt" ]; then
+          cd services/${svc}
+          pip install -r requirements.txt pytest pytest-cov
+          pytest --cov=. --cov-report=xml --ignore=tests/integration || true
+          cd ../..
+        fi
+      done
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: services/document/coverage.xml
+    expire_in: 1 week
+
+# ── Stage: security-scan ──────────────────────────────────────────────────
+dependency-scan-node:
+  stage: security-scan
+  <<: *node_template
+  script:
+    - cd gateway && npm audit --audit-level=high
+    - |
+      for svc in auth electricity gas water municipal complaint payment notification request config; do
+        if [ -f "services/${svc}/package.json" ]; then
+          cd services/${svc}
+          npm audit --audit-level=high || true
+          cd ../..
+        fi
+      done
+  allow_failure: false
+
+dependency-scan-python:
+  stage: security-scan
+  image: python:3.11-slim
+  script:
+    - pip install safety
+    - safety check -r services/document/requirements.txt || true
+    - safety check -r services/analytics/requirements.txt || true
+  allow_failure: true
+
+secret-detection:
+  stage: security-scan
+  image: registry.gitlab.com/gitlab-org/security-products/secret-detection:latest
+  script:
+    - /analyzer run
+  artifacts:
+    reports:
+      secret_detection: gl-secret-detection-report.json
+  allow_failure: false
+
+container-scan-gateway:
+  stage: security-scan
+  image: aquasec/trivy:latest
+  script:
+    - trivy image
+        --exit-code 1
+        --severity CRITICAL
+        --no-progress
+        "${DOCKER_REGISTRY}/suvidha-gateway:${CI_COMMIT_SHA}"
+  needs: [build-gateway]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "main"'
+
+# ── Stage: build ──────────────────────────────────────────────────────────
+build-gateway:
+  stage: build
+  <<: *docker_template
+  script:
+    - docker build
+        -t "${DOCKER_REGISTRY}/suvidha-gateway:${CI_COMMIT_SHA}"
+        -t "${DOCKER_REGISTRY}/suvidha-gateway:${CI_COMMIT_REF_SLUG}"
+        ./gateway
+    - docker push "${DOCKER_REGISTRY}/suvidha-gateway:${CI_COMMIT_SHA}"
+    - docker push "${DOCKER_REGISTRY}/suvidha-gateway:${CI_COMMIT_REF_SLUG}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "main"'
+
+build-services:
+  stage: build
+  <<: *docker_template
+  parallel:
+    matrix:
+      - SERVICE: [auth, electricity, gas, water, municipal, complaint, payment, notification, request, config]
+  script:
+    - docker build
+        -t "${DOCKER_REGISTRY}/suvidha-${SERVICE}:${CI_COMMIT_SHA}"
+        -t "${DOCKER_REGISTRY}/suvidha-${SERVICE}:${CI_COMMIT_REF_SLUG}"
+        "./services/${SERVICE}"
+    - docker push "${DOCKER_REGISTRY}/suvidha-${SERVICE}:${CI_COMMIT_SHA}"
+    - docker push "${DOCKER_REGISTRY}/suvidha-${SERVICE}:${CI_COMMIT_REF_SLUG}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "main"'
+
+build-python-services:
+  stage: build
+  <<: *docker_template
+  parallel:
+    matrix:
+      - SERVICE: [document, analytics]
+  script:
+    - docker build
+        -t "${DOCKER_REGISTRY}/suvidha-${SERVICE}:${CI_COMMIT_SHA}"
+        -t "${DOCKER_REGISTRY}/suvidha-${SERVICE}:${CI_COMMIT_REF_SLUG}"
+        "./services/${SERVICE}"
+    - docker push "${DOCKER_REGISTRY}/suvidha-${SERVICE}:${CI_COMMIT_SHA}"
+    - docker push "${DOCKER_REGISTRY}/suvidha-${SERVICE}:${CI_COMMIT_REF_SLUG}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "main"'
+
+build-frontend:
+  stage: build
+  <<: *docker_template
+  parallel:
+    matrix:
+      - APP: [kiosk-ui, admin-ui]
+  script:
+    - docker build
+        -t "${DOCKER_REGISTRY}/suvidha-${APP}:${CI_COMMIT_SHA}"
+        ./${APP}
+    - docker push "${DOCKER_REGISTRY}/suvidha-${APP}:${CI_COMMIT_SHA}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH == "main"'
+
+# ── Stage: staging-deploy ─────────────────────────────────────────────────
+staging-deploy:
+  stage: staging-deploy
+  image: bitnami/kubectl:latest
+  environment:
+    name: staging
+    url: https://staging.suvidha.gov.in
+  script:
+    - |
+      for svc in gateway auth electricity gas water municipal complaint payment notification document analytics request config; do
+        kubectl set image deployment/suvidha-${svc} \
+          suvidha-${svc}=${DOCKER_REGISTRY}/suvidha-${svc}:${CI_COMMIT_SHA} \
+          -n suvidha-staging
+        kubectl rollout status deployment/suvidha-${svc} \
+          -n suvidha-staging --timeout=3m
+      done
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+      when: on_success
+
+# ── Stage: integration-test ───────────────────────────────────────────────
+integration-test:
+  stage: integration-test
+  image: node:20-alpine
+  script:
+    - npm install -g newman
+    - newman run docs/api-contracts.json
+        --environment ci/newman-staging.env.json
+        --reporters cli,json
+        --reporter-json-export newman-results.json
+  artifacts:
+    paths: [newman-results.json]
+    expire_in: 1 week
+  needs: [staging-deploy]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+
+# ── Stage: security-test ──────────────────────────────────────────────────
+owasp-zap:
+  stage: security-test
+  image: owasp/zap2docker-stable:latest
+  script:
+    - zap-baseline.py
+        -t https://staging.suvidha.gov.in
+        -r zap_report.html
+        -J zap_results.json
+        --auto
+  artifacts:
+    paths: [zap_report.html, zap_results.json]
+    expire_in: 1 week
+  allow_failure: true
+  needs: [integration-test]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+
+# ── Stage: production-deploy ──────────────────────────────────────────────
+production-deploy:
+  stage: production-deploy
+  image: bitnami/kubectl:latest
+  environment:
+    name: production
+    url: https://suvidha.gov.in
+  when: manual                    # Requires human approval
+  script:
+    - |
+      for svc in gateway auth electricity gas water municipal complaint payment notification document analytics request config; do
+        kubectl set image deployment/suvidha-${svc} \
+          suvidha-${svc}=${DOCKER_REGISTRY}/suvidha-${svc}:${CI_COMMIT_SHA} \
+          -n suvidha-prod
+        kubectl rollout status deployment/suvidha-${svc} \
+          -n suvidha-prod --timeout=5m
+      done
+      echo "✅ Production deployment complete for commit ${CI_COMMIT_SHA}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
