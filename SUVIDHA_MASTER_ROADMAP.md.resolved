@@ -1,0 +1,575 @@
+# SUVIDHA — Complete Master Roadmap & Implementation Status
+
+> **Last Updated:** 26 Feb 2026  
+> **Architecture:** 13 Microservices · API Gateway · 2 React Frontends · PostgreSQL · Redis  
+> **Status:** MVP development — most services scaffolded, several integrations stubbed with mocks
+
+---
+
+## Table of Contents
+
+1. [Current Architecture Overview](#1-current-architecture-overview)
+2. [What Is Done (Completed Features)](#2-what-is-done)
+3. [What Is Broken (Known Bugs & Issues)](#3-known-bugs--issues)
+4. [What Is Missing (Pending Features)](#4-what-is-missing)
+5. [Phase-wise Implementation Plan](#5-phase-wise-implementation-plan)
+6. [Indian DPI Integrations Required](#6-indian-dpi-integrations)
+7. [Environment Variables & Secrets Checklist](#7-environment-variables--secrets)
+8. [Database Migration Checklist](#8-database-migration-checklist)
+9. [Security Hardening Checklist](#9-security-hardening)
+10. [Deployment & DevOps Checklist](#10-deployment--devops)
+
+---
+
+## 1. Current Architecture Overview
+
+```
+┌────────────────┐  ┌────────────────┐
+│   Kiosk UI     │  │   Admin UI     │
+│  (React+Vite)  │  │  (React+Vite)  │
+│  :5173 / :80   │  │  :5174 / :8080 │
+└───────┬────────┘  └───────┬────────┘
+        │                   │
+        └───────┬───────────┘
+                ▼
+┌───────────────────────────────────────┐
+│         API Gateway (Express)         │
+│            :3000                      │
+│  helmet · cors · rateLimit · JWT ·    │
+│  RBAC · auditLog · proxyToService    │
+└───────────────────┬───────────────────┘
+                    ▼
+    ┌──────────┬──────────┬──────────┐
+    ▼          ▼          ▼          ▼
+┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
+│  Auth  │ │Electri-│ │  Gas   │ │ Water  │
+│ :3001  │ │  city  │ │ :3003  │ │ :3004  │
+│Fastify │ │ :3002  │ │Fastify │ │Fastify │
+└────────┘ └────────┘ └────────┘ └────────┘
+┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
+│Municip-│ │Complai-│ │Payment │ │Notific-│
+│  al    │ │  nt    │ │ :3007  │ │ ation  │
+│ :3005  │ │ :3006  │ │Fastify │ │ :3008  │
+└────────┘ └────────┘ └────────┘ └────────┘
+┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
+│Docume- │ │Analyti-│ │Request │ │Config  │
+│  nt    │ │  cs    │ │ :3011  │ │ :3012  │
+│ :3009  │ │ :3010  │ │Fastify │ │Fastify │
+│Python  │ │Python  │ └────────┘ └────────┘
+└────────┘ └────────┘
+┌────────┐
+│ BBPS   │
+│ Mock   │
+│ :3014  │
+└────────┘
+
+Infrastructure: PostgreSQL :5432 · Redis :6379
+```
+
+### Service Stack Summary
+
+| Service | Port | Language | Framework | Status |
+|---------|------|----------|-----------|--------|
+| API Gateway | 3000 | TypeScript | Express | ✅ Working |
+| Auth | 3001 | TypeScript | Fastify | ✅ Working (OTP + JWT) |
+| Electricity | 3002 | TypeScript | Fastify | ⚠️ BBPS mock only |
+| Gas | 3003 | TypeScript | Fastify | ⚠️ BBPS mock only |
+| Water | 3004 | TypeScript | Fastify | ⚠️ BBPS mock only |
+| Municipal | 3005 | TypeScript | Fastify | ⚠️ BBPS mock only |
+| Complaint | 3006 | TypeScript | Fastify | ✅ Working |
+| Payment | 3007 | TypeScript | Fastify | ⚠️ Mock gateway only |
+| Notification | 3008 | TypeScript | Fastify | ⚠️ Fixed HTTP binding |
+| Document | 3009 | Python | FastAPI | ✅ Working (PDF gen) |
+| Analytics | 3010 | Python | FastAPI | ⚠️ Stub endpoints |
+| Request | 3011 | TypeScript | Fastify | ⚠️ Minimal |
+| Config | 3012 | TypeScript | Fastify | ⚠️ Minimal |
+| BBPS Mock | 3014 | TypeScript | Express | ✅ Working (simulator) |
+
+---
+
+## 2. What Is Done
+
+### ✅ Authentication & Authorization
+- [x] OTP Send via `/auth/otp/send` with Fastify JSON Schema validation
+- [x] OTP Verify via `/auth/otp/verify` with bcrypt hash comparison
+- [x] OTP stored in PostgreSQL `OtpVerification` table (not Redis)
+- [x] Digital lockout mechanism: `isLockedOut` + `lockoutUntil` on [User](file:///d:/SUVIDHA/services/auth/src/services/session.service.ts#87-107) model
+- [x] JWT signing with HS256 (citizen: 30min, admin: 8hr expiry)
+- [x] JWT refresh endpoint via `/auth/refresh`
+- [x] Session model in DB with `jwtId`, `deviceId`, `ipAddress`, `expiresAt`
+- [x] Admin session revocation endpoint: `DELETE /auth/admin/sessions/:userId`
+- [x] Gateway JWT validation middleware ([validateJWT.ts](file:///d:/SUVIDHA/gateway/src/middleware/validateJWT.ts))
+- [x] Gateway RBAC enforcement middleware ([rbacEnforcer.ts](file:///d:/SUVIDHA/gateway/src/middleware/rbacEnforcer.ts))
+- [x] Admin UI strict role checking in Zustand store (rejects CITIZEN tokens)
+- [x] MeriPehchaan SSO login page (UI only — callback not wired to real SSO)
+- [x] Demo bypass login for both Kiosk and Admin UIs
+
+### ✅ API Gateway
+- [x] Express gateway with 11 middleware layers in correct order
+- [x] Proxy to all 13 microservices via `proxyToService()`
+- [x] Helmet security headers
+- [x] CORS with configurable origin whitelist
+- [x] Rate limiting (default + per-route OTP limiters)
+- [x] JWT validation with public route bypass
+- [x] RBAC enforcer with role-to-route mapping
+- [x] Audit logger middleware
+- [x] Structured JSON request logging with `traceId` injection
+
+### ✅ Kiosk UI (Frontend)
+- [x] Language selection page (en, hi, mr, ta, bn)
+- [x] Mobile number entry with numeric keypad
+- [x] OTP entry with 6-digit input, countdown timer, resend logic
+- [x] OTP lockout UI handling (`AUTH_OTP_LOCKED`)
+- [x] Home page with service cards
+- [x] Bill detail page with consumer ID lookup
+- [x] Payment mode selection (UPI/Card/NetBanking)
+- [x] UPI payment page with QR code
+- [x] Payment success with receipt download
+- [x] Complaint form with category selection
+- [x] Complaint tracking by reference number
+- [x] Service request form (new connection, modification, etc.)
+- [x] Advisory display page
+- [x] QR continue (mobile handoff)
+- [x] Session timeout modal with countdown
+- [x] Advisory bar and emergency broadcast modal
+- [x] Axios interceptor for 401 auto-refresh
+- [x] Voice input component (Bhashini ASR stub)
+- [x] Accessibility panel
+
+### ✅ Admin UI (Frontend)
+- [x] Login page with MeriPehchaan SSO redirect
+- [x] SSO callback handler
+- [x] Dashboard with summary cards
+- [x] Complaint list with filters
+- [x] Complaint detail with status update
+- [x] Advisory list and editor
+- [x] Analytics reports page
+- [x] Kiosk health monitoring page
+- [x] Kiosk management settings
+- [x] Service config settings
+- [x] User management page
+- [x] Protected routes with RequireAuth guard
+
+### ✅ Infrastructure
+- [x] Docker Compose with all 18 containers
+- [x] PostgreSQL 15 with health checks
+- [x] Redis 7 with health checks
+- [x] Prisma schema with 20+ models and all enums
+- [x] Multi-stage Docker builds for all services
+- [x] Environment variable configuration (.env with 126 lines)
+- [x] GitLab CI pipeline configuration
+
+### ✅ Document Service
+- [x] PDF receipt generation (Python + ReportLab)
+- [x] Receipt download endpoint
+- [x] Public receipt verification via HMAC-SHA256
+- [x] Thermal printer support (ESC/POS)
+
+---
+
+## 3. Known Bugs & Issues
+
+### 🔴 Critical
+
+| # | Issue | Service | Details |
+|---|-------|---------|---------|
+| 1 | **Notification service HTTP binding** | notification | Was using `httpServer.listen()` bypassing Fastify router — **FIXED** but needs Docker rebuild verification |
+| 2 | **CORS not configured for Vite dev** | gateway | `CORS_ORIGINS` in [.env](file:///d:/SUVIDHA/.env) file still only has `:80,:8080` — docker-compose was fixed but [.env](file:///d:/SUVIDHA/.env) is stale |
+| 3 | **Advisory store undefined crash** | kiosk-ui | `advisories.filter()` on undefined — **FIXED** with [(advisories \|\| [])](file:///d:/SUVIDHA/admin-ui/src/lib/utils.ts#4-7) |
+| 4 | **OTP payload missing kioskId/ulbId** | kiosk-ui | Frontend was sending only `{mobile}` — **FIXED** by adding `kioskId` and `ulbId` from env |
+| 5 | **Database tables not created** | all | `prisma migrate deploy` has never been run against PostgreSQL — tables likely don't exist |
+| 6 | **No seed data** | all | No ULBs, wards, kiosks, complaint categories, or config entries exist in DB |
+
+### 🟡 Medium
+
+| # | Issue | Service | Details |
+|---|-------|---------|---------|
+| 7 | `VITE_KIOSK_ID` is a string `"KIOSK-DEV-001"` but schema expects UUID | kiosk-ui | Will cause FK validation errors when creating sessions |
+| 8 | MeriPehchaan SSO callback is **UI-only** — no backend token exchange | auth | Admin login will fail in non-demo mode |
+| 9 | SMS Provider is `MOCK` — OTPs are only logged to console | auth | No actual SMS delivery in dev or staging |
+| 10 | `react-router-dom` v6 deprecation warnings | kiosk-ui | Should migrate to v7 or suppress warnings |
+| 11 | Tailwind `@import` order error in kiosk-ui CSS | kiosk-ui | `@import must precede all other statements` |
+| 12 | `npm audit` vulnerabilities not addressed | all | Multiple packages have known vulnerabilities |
+
+### 🟢 Low
+
+| # | Issue | Details |
+|---|-------|---------|
+| 13 | Docker `version` attribute is obsolete | Remove `version: '3.9'` from docker-compose.yml |
+| 14 | Admin UI build warning: chunk > 500kB | Need code splitting / manual chunks |
+| 15 | Redis eviction policy warning in notification service | Should be `noeviction` for BullMQ |
+
+---
+
+## 4. What Is Missing
+
+### 🔴 Authentication & SSO (Priority: Critical)
+
+- [ ] **MeriPehchaan SSO Backend Integration**
+  - Implement OAuth2 authorization code flow in [auth](file:///d:/SUVIDHA/gateway/src/middleware/rbacEnforcer.ts#45-72) service
+  - `POST /auth/admin/sso/callback` must exchange [code](file:///d:/SUVIDHA/admin-ui/src/store/admin.store.ts#24-45) for tokens with MeriPehchaan
+  - Validate `id_token`, extract `ssoSubject`, look up or create `AdminUser`
+  - Issue admin JWT with `MUNICIPAL_ADMIN` or `SYSTEM_ADMIN` role
+  - **What you need:** MeriPehchaan `client_id`, `client_secret`, and sandbox access
+
+- [ ] **DigiLocker Integration**
+  - OAuth2 flow for citizen document verification
+  - Pull Aadhaar, PAN, driving license, property documents
+  - Store document metadata in `RequestDocument` table
+  - **What you need:** DigiLocker `client_id`, `client_secret` from NIC
+
+- [ ] **Aadhaar-based eKYC** (optional, high compliance burden)
+  - Biometric/OTP-based authentication via UIDAI API
+  - Requires AUA/KUA license and ASA agreement
+
+### 🔴 Payment Gateway (Priority: Critical)
+
+- [ ] **Real Payment Gateway Integration**
+  - Currently the payment service uses a mock/demo mode
+  - Integrate with BillDesk / Razorpay / PayU for production UPI + Card + NetBanking
+  - Implement webhook signature verification
+  - Implement payment reconciliation cron (worker exists but needs real data)
+  - **What you need:** Merchant credentials, VPA, webhook secret, PCI-DSS compliance
+
+- [ ] **BBPS Live Integration**
+  - Replace `bbps-mock` service with real NPCI BBPS Agent API calls
+  - Implement mTLS certificate exchange
+  - Handle real bill fetch, bill payment, and transaction status APIs
+  - **What you need:** NPCI BBPS Agent ID, Agent Secret, mTLS certificates
+
+### 🔴 Database Setup (Priority: Critical)
+
+- [ ] **Run Prisma Migrations**
+  - Execute `npx prisma migrate deploy` to create all 20+ tables
+  - Verify foreign key constraints, indexes, and triggers
+
+- [ ] **Seed Data**
+  - Create at least 1 ULB (e.g., Pune Municipal Corporation)
+  - Create wards within the ULB
+  - Create at least 1 Kiosk record with valid UUID
+  - Create complaint categories for each `ServiceType`
+  - Create initial config entries (biller IDs, template IDs, etc.)
+  - Create at least 1 `AdminUser` for testing
+
+### 🟡 Utility Services (Priority: High)
+
+- [ ] **Bill Fetch → Real BBPS**
+  - Electricity, Gas, Water, Municipal services all currently hit `bbps-mock`
+  - Need to wire them to real BBPS UAT sandbox first, then production
+  - Each service needs its specific `billerId` configured per ULB
+
+- [ ] **Bill Payment Ledger Settlement**
+  - `POST /settle-ledger` on each utility service needs to update local records
+  - Payment webhook → utility ledger settlement flow needs end-to-end testing
+
+- [ ] **Real-time Bill Status**
+  - After payment, the bill snapshot should be marked as paid
+  - Reconciliation worker should poll gateway for settlement status
+
+### 🟡 Notification Service (Priority: High)
+
+- [ ] **Real SMS Delivery**
+  - Wire MSG91 or Twilio provider in [sms.worker.ts](file:///d:/SUVIDHA/services/notification/src/workers/sms.worker.ts)
+  - Configure DLT-registered SMS templates (mandatory in India)
+  - Implement delivery status callbacks
+  - **What you need:** MSG91 auth key + DLT template IDs, or Twilio credentials
+
+- [ ] **Push Notifications**
+  - Add FCM (Firebase Cloud Messaging) support for mobile PWA
+  - Store FCM tokens per user session
+
+- [ ] **Email Notifications**
+  - Add SMTP/SES support for admin notifications
+  - Receipt email to citizens (if email on file)
+
+### 🟡 Complaint & Grievance (Priority: High)
+
+- [ ] **Photo Upload**
+  - Complaint form supports `photoUrl` but no actual file upload endpoint
+  - Need object storage integration (MeghRaj S3-compatible or MinIO)
+  - Implement `POST /complaints/upload` with multipart form data
+
+- [ ] **Mappls Geolocation**
+  - Complaint location currently stubbed
+  - Need to integrate MapmyIndia/Mappls API for address autocomplete
+  - Reverse geocoding for kiosk-detected coordinates
+  - **What you need:** Mappls API key with geocoding permissions
+
+- [ ] **Officer Auto-Assignment**
+  - Auto-assign complaints to ward-level officers based on complaint location
+  - Escalation rules: unresolved after 48hr → escalate to ULB admin
+
+- [ ] **SLA Tracking**
+  - Calculate `expectedResolutionAt` based on complaint priority
+  - Dashboard counters for SLA breach, pending, resolved
+
+### 🟡 Service Request (Priority: Medium)
+
+- [ ] **End-to-End New Connection Flow**
+  - Service request form → document upload → payment → admin review → approval
+  - Currently `request` service is minimal, needs full CRUD routes
+  - DigiLocker document pull for identity verification
+
+- [ ] **Document Upload & Verification**
+  - Camera capture on kiosk → upload to object storage
+  - Admin review panel with accept/reject per document
+
+### 🟢 Analytics (Priority: Medium)
+
+- [ ] **Real Analytics Endpoints**
+  - Transaction summary by service type, time period, ULB
+  - Complaint statistics: registered vs resolved, average resolution time
+  - Kiosk usage: sessions per day, peak hours, most used services
+  - Revenue reports: total collections, UPI vs Card breakdown
+
+- [ ] **Kiosk Health Monitoring**
+  - Heartbeat API: kiosk sends status every 60s
+  - Admin dashboard shows offline/degraded kiosks
+  - Alert when kiosk goes offline for > 5 minutes
+
+### 🟢 Bhashini Integration (Priority: Medium)
+
+- [ ] **Speech-to-Text for Voice Input**
+  - Currently stubbed with mock responses
+  - Need real Bhashini ASR pipeline integration
+  - Support Hindi, Marathi, Tamil, Bengali voice input
+  - **What you need:** Bhashini API key, pipeline URL, user ID
+
+### 🟢 UI Polish (Priority: Low-Medium)
+
+- [ ] Fix Tailwind `@import` order in kiosk-ui CSS
+- [ ] Migrate react-router-dom to v7 (or suppress v6 warnings)
+- [ ] Add proper loading skeletons to all pages
+- [ ] Add empty states for lists (no bills, no complaints, etc.)
+- [ ] Add error boundary pages instead of React's default error screen
+- [ ] Keyboard accessibility for kiosk touchscreen
+- [ ] Print receipt button integration with thermal printer API
+
+---
+
+## 5. Phase-wise Implementation Plan
+
+### Phase 1: Database & Seed Data (Priority: CRITICAL — Do First)
+**Estimated Time: 1 day**
+
+1. Run `npx prisma migrate deploy` against the PostgreSQL container
+2. Create seed script in `database/seed/` with:
+   - 1 ULB: Pune Municipal Corporation
+   - 5 Wards within Pune
+   - 2 Kiosks with valid UUIDs
+   - Complaint categories for all 4 service types
+   - 1 AdminUser (SUPER_ADMIN)
+   - Config entries for biller IDs
+3. Fix `VITE_KIOSK_ID` to match a real Kiosk UUID from seed
+4. Run seeds and verify all services can connect to populated DB
+
+### Phase 2: Fix Remaining Bugs (Priority: CRITICAL)
+**Estimated Time: 1-2 days**
+
+1. Update `.env` CORS_ORIGINS to include `:5173` and `:5174`
+2. Fix Tailwind CSS `@import` ordering in kiosk-ui
+3. Rebuild the notification container (`docker compose up -d --build suvidha-notification`)
+4. Verify OTP send/verify flow end-to-end (with seeded ULB + kiosk)
+5. Verify the complaint creation flow end-to-end
+6. Verify the bill fetch flow end-to-end (via BBPS mock)
+7. Fix all TypeScript compilation errors across services
+8. Address `npm audit` vulnerabilities
+
+### Phase 3: Complete Authentication (Priority: HIGH)
+**Estimated Time: 3-5 days**
+
+1. **MeriPehchaan SSO** — implement backend token exchange:
+   - Add `POST /auth/admin/sso/callback` handler in auth service
+   - Exchange authorization code for access_token + id_token
+   - Validate id_token, extract `sub` claim
+   - Upsert `AdminUser` with `ssoSubject`
+   - Issue admin JWT and redirect to Admin UI
+2. **Session management** — verify:
+   - JWT refresh flow works end-to-end
+   - Admin session revocation works
+   - Expired token correctly triggers re-login
+
+### Phase 4: Payment Gateway Integration (Priority: HIGH)
+**Estimated Time: 3-5 days**
+
+1. Choose payment gateway: BillDesk (government preferred) or Razorpay
+2. Implement `POST /payments/initiate` with real gateway SDK
+3. Implement webhook handler with signature verification
+4. Wire receipt generation after successful payment
+5. Test UPI, Card, and NetBanking flows
+6. Implement refund API (`POST /payments/refund`)
+
+### Phase 5: BBPS Live Connection (Priority: HIGH)
+**Estimated Time: 5-7 days**
+
+1. Register as BBPS Agent with NPCI
+2. Configure mTLS certificates
+3. Replace mock calls in electricity/gas/water/municipal services
+4. Implement bill fetch → display → pay → settle flow
+5. Handle BBPS error codes and retry logic
+6. Test with BBPS UAT sandbox
+
+### Phase 6: DigiLocker Integration (Priority: MEDIUM)
+**Estimated Time: 3-4 days**
+
+1. Register with NIC for DigiLocker API access
+2. Implement OAuth2 flow for document access
+3. Pull and verify Aadhaar, PAN, address proof documents
+4. Display pulled documents in service request flow
+5. Store document metadata in `RequestDocument` table
+
+### Phase 7: SMS & Notifications (Priority: MEDIUM)
+**Estimated Time: 2-3 days**
+
+1. Register DLT templates with TRAI for OTP and transactional SMS
+2. Wire MSG91 provider in notification service
+3. Implement OTP SMS delivery
+4. Implement payment confirmation SMS
+5. Implement complaint status update SMS
+6. Test SMS delivery with real phone numbers
+
+### Phase 8: Complaint Enhancements (Priority: MEDIUM)
+**Estimated Time: 3-4 days**
+
+1. Implement photo upload with object storage
+2. Integrate Mappls geocoding API
+3. Implement auto-assignment of complaints to ward officers
+4. Add SLA tracking and breach alerts
+5. Add escalation logic for overdue complaints
+
+### Phase 9: Analytics & Monitoring (Priority: MEDIUM)
+**Estimated Time: 2-3 days**
+
+1. Build real analytics queries against PostgreSQL
+2. Implement kiosk heartbeat API
+3. Build admin dashboard with real-time metrics
+4. Add revenue report generation (CSV/PDF export)
+
+### Phase 10: Production Deployment (Priority: HIGH — Final Phase)
+**Estimated Time: 3-5 days**
+
+1. Set up production PostgreSQL (MeghRaj Cloud / Azure)
+2. Set up production Redis
+3. Configure real secrets (JWT, OTP pepper, gateway keys)
+4. Set up HTTPS with SSL certificates
+5. Configure production CORS origins
+6. Set up CI/CD pipeline (GitLab CI is already scaffolded)
+7. Set up monitoring (Prometheus + Grafana or equivalent)
+8. Load testing with k6 or Artillery
+9. Penetration testing
+
+---
+
+## 6. Indian DPI Integrations
+
+These are the Government Digital Public Infrastructure (DPI) platforms SUVIDHA must integrate with for production deployment:
+
+| DPI Platform | Purpose | Status | What You Need |
+|---|---|---|---|
+| **BBPS (NPCI)** | Bill fetch & payment | 🔴 Mock only | BBPS Agent ID, Agent Secret, mTLS certs |
+| **MeriPehchaan** | Admin SSO | 🔴 UI only | OAuth2 client_id, client_secret, sandbox |
+| **DigiLocker** | Document verification | 🔴 Not started | NIC client_id, client_secret |
+| **Bhashini** | Speech-to-text | 🔴 Mock only | API key, pipeline URL, user ID |
+| **Mappls/MapmyIndia** | Geolocation | 🔴 Mock only | API key with geocoding access |
+| **UPI (NPCI)** | Payment | 🔴 Mock only | Merchant VPA, gateway integration |
+| **MSG91 / CDAC** | SMS delivery | 🔴 Mock only | Auth key, DLT template IDs |
+| **MeghRaj Cloud** | Object storage | 🔴 Not started | S3-compatible credentials |
+| **Aadhaar (UIDAI)** | eKYC (optional) | 🔴 Not started | AUA/KUA license, ASA agreement |
+
+---
+
+## 7. Environment Variables & Secrets
+
+### Required for Production (Currently Placeholder)
+
+| Variable | Current Value | Action Required |
+|---|---|---|
+| `JWT_SECRET` | Dev key (hex string) | ⚠️ Generate new with `openssl rand -hex 32` |
+| `OTP_PEPPER` | `REPLACE_WITH_32_CHAR_RANDOM_STRING` | 🔴 **MUST replace** |
+| `MERIPEHCHAAN_CLIENT_SECRET` | Placeholder | 🔴 Get from MeriPehchaan |
+| `MSG91_AUTH_KEY` | Placeholder | 🔴 Get from MSG91 |
+| `MSG91_TEMPLATE_ID` | Placeholder | 🔴 Get from MSG91 |
+| `DIGILOCKER_CLIENT_ID` | Placeholder | 🔴 Get from NIC |
+| `DIGILOCKER_CLIENT_SECRET` | Placeholder | 🔴 Get from NIC |
+| `BHASHINI_API_KEY` | Placeholder | 🔴 Get from Bhashini |
+| `BHASHINI_USER_ID` | Placeholder | 🔴 Get from Bhashini |
+| `MAPPLS_API_KEY` | Placeholder | 🔴 Get from MapmyIndia |
+| `PAYMENT_GATEWAY_URL` | Placeholder | 🔴 Get from BillDesk/Razorpay |
+| `PAYMENT_GATEWAY_KEY` | Placeholder | 🔴 Get from BillDesk/Razorpay |
+| `OBJECT_STORAGE_KEY` | Placeholder | 🔴 Get from MeghRaj |
+| `OBJECT_STORAGE_SECRET` | Placeholder | 🔴 Get from MeghRaj |
+| `POSTGRES_PASSWORD` | `suvidhadev123` | ⚠️ Change for production |
+| `REDIS_PASSWORD` | `suvidhadev123` | ⚠️ Change for production |
+
+---
+
+## 8. Database Migration Checklist
+
+- [ ] Ensure PostgreSQL container is healthy: `docker exec suvidha-postgres pg_isready`
+- [ ] Run migrations: `npx prisma migrate deploy --schema=database/schema.prisma`
+- [ ] Verify all 20+ tables created: `\dt` in psql
+- [ ] Run seed script to populate reference data
+- [ ] Verify foreign key relationships work
+- [ ] Create audit log trigger (see `database/migrations/003_audit_trigger.sql`)
+
+---
+
+## 9. Security Hardening
+
+### Before Production
+
+- [ ] Replace all placeholder secrets in `.env`
+- [ ] Enable HTTPS (TLS 1.2+) for all public endpoints
+- [ ] Switch `OTP_MOCK=false` and `BBPS_MOCK=false` etc.
+- [ ] Enable `helmet` strict CSP headers
+- [ ] Implement CSRF protection for admin forms
+- [ ] Set up WAF (Web Application Firewall) rules
+- [ ] Enable PostgreSQL connection pooling via PgBouncer (config exists)
+- [ ] Enable Redis AUTH in production
+- [ ] Implement IP allowlisting for admin endpoints
+- [ ] Run OWASP ZAP or equivalent security scan
+- [ ] DPDP Act compliance: verify no plain mobile numbers stored
+- [ ] Implement audit log rotation and archival
+
+---
+
+## 10. Deployment & DevOps
+
+### CI/CD Pipeline (`.gitlab-ci.yml` exists)
+
+- [ ] Set up GitLab Runner or migrate to GitHub Actions
+- [ ] Configure Docker registry for built images
+- [ ] Set up staging environment
+- [ ] Set up production environment (MeghRaj Cloud)
+- [ ] Configure environment-specific `.env` files
+- [ ] Set up health check monitoring (UptimeRobot / Prometheus)
+- [ ] Set up centralized logging (ELK stack / Loki)
+- [ ] Set up alerting (PagerDuty / Slack webhooks)
+- [ ] Configure database backups (daily pg_dump + WAL archiving)
+- [ ] Configure Redis persistence (AOF already enabled)
+- [ ] Load test target: 500 concurrent kiosk sessions
+- [ ] Set up disaster recovery plan
+
+---
+
+## Summary: Effort Estimation
+
+| Phase | Effort | Dependencies |
+|-------|--------|-------------|
+| Phase 1: DB & Seeds | 1 day | None |
+| Phase 2: Bug Fixes | 1-2 days | Phase 1 |
+| Phase 3: Auth Complete | 3-5 days | MeriPehchaan credentials |
+| Phase 4: Payment Gateway | 3-5 days | BillDesk/Razorpay credentials |
+| Phase 5: BBPS Live | 5-7 days | NPCI BBPS Agent registration |
+| Phase 6: DigiLocker | 3-4 days | NIC credentials |
+| Phase 7: SMS/Notifications | 2-3 days | MSG91 + DLT templates |
+| Phase 8: Complaints Enhancement | 3-4 days | Mappls API key |
+| Phase 9: Analytics | 2-3 days | Phase 1 |
+| Phase 10: Production Deploy | 3-5 days | All phases + cloud infra |
+| **Total** | **~27-43 days** | — |
+
+> [!IMPORTANT]
+> **Phase 1 (Database & Seeds) and Phase 2 (Bug Fixes) must be completed first.** Without actual database tables and seed data, no service can function properly. The CORS, CSS, and Kiosk payload bugs have been patched in code but need end-to-end verification.
+
+> [!CAUTION]
+> **Production deployment requires real credentials from 8+ government/private APIs.** The application process for BBPS Agent registration alone can take 2-4 weeks. Start the credential acquisition process in parallel with development.
