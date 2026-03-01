@@ -1,0 +1,50 @@
+name: SUVIDHA Smoke Checks
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: suvidha_db
+          POSTGRES_USER: suvidha
+          POSTGRES_PASSWORD: changeme_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U suvidha -d suvidha_db"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install root deps
+        run: npm install
+
+      - name: Build gateway
+        working-directory: ./gateway
+        run: |
+          npm ci
+          npm run build
+
+      - name: Run TypeScript type-check (gateway only for now)
+        working-directory: ./gateway
+        run: npm run type-check
+
