@@ -61,6 +61,24 @@ services:
       timeout: 3s
       retries: 5
 
+  # ── Admin demo data seed (runs on every "docker compose up"; idempotent)
+  suvidha-seed-admin-demo:
+    image: postgres:15-alpine
+    container_name: suvidha-seed-admin-demo
+    restart: "no"
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-changeme_dev}
+      PGUSER: ${POSTGRES_USER:-suvidha}
+      PGDATABASE: ${POSTGRES_DB:-suvidha_db}
+    volumes:
+      - ./database/migrations:/migrations:ro
+    command: ["sh", "-c", "until psql -h suvidha-postgres -U \"$$PGUSER\" -d \"$$PGDATABASE\" -c 'SELECT 1' 2>/dev/null; do echo 'Waiting for Postgres...'; sleep 2; done; psql -h suvidha-postgres -U \"$$PGUSER\" -d \"$$PGDATABASE\" -f /migrations/008_seed_admin_video_data.sql || true; echo 'Seed done.'; exit 0"]
+    networks:
+      - suvidha-internal
+    depends_on:
+      suvidha-postgres:
+        condition: service_healthy
+
   # ── API Gateway ──────────────────────────────────────────────────────────
   suvidha-gateway:
     build:
@@ -95,6 +113,8 @@ services:
         condition: service_healthy
       suvidha-redis:
         condition: service_healthy
+      suvidha-seed-admin-demo:
+        condition: service_completed_successfully
     healthcheck:
       test: [ "CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1" ]
       interval: 30s
